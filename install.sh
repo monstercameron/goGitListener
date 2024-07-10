@@ -27,6 +27,20 @@ if [ ! -d "$INSTALL_DIR" ]; then
     exit 1
 fi
 
+# Change to the installation directory
+cd $INSTALL_DIR
+
+# Build the Go binary
+echo "Building the Go binary..."
+go build -o $BINARY_NAME main.go
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to build the Go binary."
+    exit 1
+fi
+
+echo "Go binary built successfully."
+
 # Create systemd service file
 echo "Creating systemd service file..."
 cat > $SERVICE_FILE <<EOL
