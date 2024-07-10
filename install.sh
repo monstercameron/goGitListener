@@ -8,7 +8,7 @@ SERVICE_NAME="gogitlistener"
 GO_FILE="main.go"
 BINARY_NAME="gogitlistener"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
-INSTALL_DIR="/opt/$SERVICE_NAME"
+INSTALL_DIR="/root/$SERVICE_NAME"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -16,17 +16,18 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Create installation directory
+# Stop the service if it's running
+if systemctl is-active --quiet $SERVICE_NAME; then
+    echo "Stopping $SERVICE_NAME service..."
+    systemctl stop $SERVICE_NAME
+fi
+
+# Create installation directory if it doesn't exist
 mkdir -p $INSTALL_DIR
 
 # Copy main.go and config.json to installation directory
 cp $GO_FILE $INSTALL_DIR/
 cp config.json $INSTALL_DIR/
-
-# Build the Go application
-echo "Building the Go application..."
-cd $INSTALL_DIR
-go build -o $BINARY_NAME $GO_FILE
 
 # Create systemd service file
 echo "Creating systemd service file..."
@@ -38,8 +39,8 @@ After=network.target
 [Service]
 ExecStart=$INSTALL_DIR/$BINARY_NAME
 WorkingDirectory=$INSTALL_DIR
-User=www-data
-Group=www-data
+User=root
+Group=root
 Restart=always
 
 [Install]
@@ -52,5 +53,5 @@ systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl start $SERVICE_NAME
 
-echo "Installation complete. GoGitListener is now running as a service."
+echo "Installation complete. The GoGitListener is now running as a service."
 echo "You can check its status with: systemctl status $SERVICE_NAME"
