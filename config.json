@@ -1,10 +1,10 @@
 {
-    "project1": {
-      "secret": "your_webhook_secret_for_project1",
-      "path": "/path/to/project1/scripts"
+    "goGitListener": {
+      "secret": "your_webhook_secret_for_goGitListener",
+      "path": "/root/goGitListener"
     },
-    "project2": {
-      "secret": "your_webhook_secret_for_project2",
-      "path": "/path/to/project2/scripts"
+    "personalWebsite2024": {
+      "secret": "your_webhook_secret_for_personalWebsite2024",
+      "path": "/root/PersonalWebsite2024"
     }
   }

@@ -7,11 +7,12 @@
 4. [Installation](#installation)
 5. [Configuration](#configuration)
 6. [Usage](#usage)
-7. [How It Works](#how-it-works)
-8. [Security Considerations](#security-considerations)
-9. [Troubleshooting](#troubleshooting)
-10. [Contributing](#contributing)
-11. [License](#license)
+7. [Metrics](#metrics)
+8. [How It Works](#how-it-works)
+9. [Security Considerations](#security-considerations)
+10. [Troubleshooting](#troubleshooting)
+11. [Contributing](#contributing)
+12. [License](#license)
 
 ## Introduction
 
@@ -24,12 +25,15 @@ GoGitListener is a Go application designed to automate actions in response to Gi
 - Executes custom scripts for each project on push events
 - Configurable through a JSON file
 - Lightweight and easy to set up
+- Logs webhook requests for monitoring and debugging
+- Provides a `/metrics` endpoint to view logs
 
 ## Prerequisites
 
 - Go 1.16 or later
 - A server with a public IP address (e.g., a Digital Ocean VPS)
 - Basic knowledge of Go, GitHub, and server administration
+- Git installed on the server
 
 ## Installation
 
@@ -97,13 +101,17 @@ If you prefer to install manually:
    /path/to/project2/scripts/cd.sh
    ```
 
-   This script will be executed when a push event is received. Example content of `cd.sh`:
+   This script will be executed when a push event is received. For the GoGitListener project itself, you can use the following `cd.sh` script:
+
    ```bash
    #!/bin/bash
-   cd /path/to/your/repository
+   cd /path/to/gogitlistener
    git pull origin main
-   # Add any other commands you want to run after a push
+   go build -o gogitlistener main.go
+   sudo systemctl restart gogitlistener
    ```
+
+   Make sure to replace `/path/to/gogitlistener` with the actual path to your GoGitListener directory.
 
 3. Make sure the `cd.sh` scripts are executable:
    ```
@@ -128,13 +136,27 @@ If you prefer to install manually:
 
 3. The listener will now receive webhooks and execute the corresponding `scripts/cd.sh` script for each push event.
 
+## Metrics
+
+GoGitListener provides a `/metrics` endpoint to view the logs of webhook requests. To access the metrics:
+
+1. Ensure GoGitListener is running.
+2. Open a web browser or use a tool like `curl` to access:
+   ```
+   http://your_server_ip:8080/metrics
+   ```
+3. You will see the contents of the `logs/log.log` file, which contains detailed information about each webhook request received.
+
+Note: In a production environment, you should secure this endpoint to prevent unauthorized access to potentially sensitive information.
+
 ## How It Works
 
 1. When a push event occurs on GitHub, it sends a POST request to the specified webhook URL.
 2. GoGitListener receives this request and extracts the project name from the URL query parameters.
 3. It loads the project configuration from `config.json` and verifies the webhook signature using the project's secret.
 4. If the signature is valid, it executes the `scripts/cd.sh` script in the project's specified path.
-5. The script typically pulls the latest changes and performs any necessary actions (e.g., restarting services).
+5. The script typically pulls the latest changes, rebuilds the application if necessary, and restarts the service.
+6. All webhook requests are logged to `logs/log.log` for monitoring and debugging purposes.
 
 ## Security Considerations
 
@@ -143,6 +165,7 @@ If you prefer to install manually:
 - Regularly update your Go installation and dependencies.
 - Implement proper firewall rules on your server.
 - Limit the permissions of the user running GoGitListener.
+- Secure the `/metrics` endpoint in production environments.
 
 ## Troubleshooting
 
@@ -150,6 +173,7 @@ If you prefer to install manually:
 - **Invalid signature errors**: Verify that the secrets in `config.json` match those set in GitHub.
 - **Script not executing**: Check file permissions and paths in `config.json`. Ensure `scripts/cd.sh` exists in the project directory.
 - **Errors in script execution**: Review your `cd.sh` scripts and check the listener's log output.
+- **Service not restarting**: Ensure the user running GoGitListener has permission to restart the service.
 
 ## Contributing
 
