@@ -1,0 +1,10 @@
+{
+    "project1": {
+      "secret": "your_webhook_secret_for_project1",
+      "path": "/path/to/project1/scripts"
+    },
+    "project2": {
+      "secret": "your_webhook_secret_for_project2",
+      "path": "/path/to/project2/scripts"
+    }
+  }
