@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	port         = "8080"
+	port         = "3002"
 	configFile   = "config.json"
 	cdScriptName = "cd.sh"
 	logDir       = "logs"
