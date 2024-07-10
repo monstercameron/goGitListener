@@ -43,6 +43,35 @@ var (
 	logger *log.Logger
 )
 
+func init() {
+	// Check if config file exists
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		log.Fatalf("Config file %s does not exist", configFile)
+	}
+
+	// Ensure log directory exists
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Fatalf("Failed to create log directory: %v", err)
+	}
+
+	// Check if log file exists, if not create it
+	logPath := filepath.Join(logDir, logFile)
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		file, err := os.Create(logPath)
+		if err != nil {
+			log.Fatalf("Failed to create log file: %v", err)
+		}
+		file.Close()
+	}
+
+	// Validate config file
+	if _, err := loadConfig(); err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	log.Println("Initialization completed successfully")
+}
+
 func main() {
 	var err error
 	config, err = loadConfig()
@@ -55,19 +84,27 @@ func main() {
 		log.Fatalf("Error setting up logging: %v", err)
 	}
 
-	http.HandleFunc("/webhook", handleWebhook)
-	http.HandleFunc("/metrics", handleMetrics)
+	http.HandleFunc("/webhook", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleWebhook(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleMetrics(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
 	log.Printf("Server is running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func setupLogging() error {
-	// Ensure the logs directory exists
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return fmt.Errorf("error creating logs directory: %v", err)
-	}
-
 	// Open the log file
 	logPath := filepath.Join(logDir, logFile)
 	logFileHandle, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -98,12 +135,12 @@ func loadConfig() (Config, error) {
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	projectName := r.URL.Query().Get("project")
+	if projectName == "" {
+		http.Error(w, "Project name is required", http.StatusBadRequest)
 		return
 	}
 
-	projectName := r.URL.Query().Get("project")
 	logEntry := LogEntry{
 		Timestamp:   time.Now().Format(time.RFC3339),
 		ProjectName: projectName,
@@ -113,7 +150,9 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Log headers
 	for name, values := range r.Header {
-		logEntry.Headers[name] = values[0]
+		if len(values) > 0 {
+			logEntry.Headers[name] = values[0]
+		}
 	}
 
 	// Read and log payload
@@ -185,12 +224,36 @@ func verifySignature(signature string, payload []byte, secret string) bool {
 
 func executeScript(projectPath string) error {
 	scriptPath := filepath.Join(projectPath, "scripts", cdScriptName)
+
+	// Check if the script exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("script does not exist: %s", scriptPath)
+	}
+
+	// Get the current file mode
+	info, err := os.Stat(scriptPath)
+	if err != nil {
+		return fmt.Errorf("error getting file info: %v", err)
+	}
+
+	// Check if the script is executable
+	if info.Mode().Perm()&0111 == 0 {
+		// Make the script executable
+		if err := os.Chmod(scriptPath, info.Mode()|0111); err != nil {
+			return fmt.Errorf("error making script executable: %v", err)
+		}
+		log.Printf("Made script executable: %s", scriptPath)
+	}
+
+	// Execute the script
 	cmd := exec.Command("/bin/sh", scriptPath)
 	cmd.Dir = projectPath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("script execution failed: %v\nOutput: %s", err, output)
 	}
+
+	log.Printf("Script executed successfully: %s", scriptPath)
 	return nil
 }
 
