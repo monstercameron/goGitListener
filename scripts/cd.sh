@@ -4,11 +4,11 @@
 set -e
 
 # Define variables
-SERVICE_NAME="gogitlistener"
-INSTALL_DIR="/root/$SERVICE_NAME"
-BINARY_NAME="gogitlistener"
+SERVICE_NAME="goGitListener"
+INSTALL_DIR="/root/goGitListener"
+BINARY_NAME="goGitListener"
 
-# Change to the GoGitListener directory
+# Change to the goGitListener directory
 cd $INSTALL_DIR
 
 # Stop the service
@@ -27,4 +27,4 @@ go build -o $BINARY_NAME main.go
 echo "Starting $SERVICE_NAME service..."
 systemctl start $SERVICE_NAME
 
-echo "GoGitListener updated and restarted successfully"
+echo "goGitListener updated and restarted successfully"

@@ -4,11 +4,10 @@
 set -e
 
 # Define variables
-SERVICE_NAME="gogitlistener"
-GO_FILE="main.go"
-BINARY_NAME="gogitlistener"
+SERVICE_NAME="goGitListener"
+BINARY_NAME="goGitListener"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
-INSTALL_DIR="/root/$SERVICE_NAME"
+INSTALL_DIR="/root/goGitListener"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -22,18 +21,17 @@ if systemctl is-active --quiet $SERVICE_NAME; then
     systemctl stop $SERVICE_NAME
 fi
 
-# Create installation directory if it doesn't exist
-mkdir -p $INSTALL_DIR
-
-# Copy main.go and config.json to installation directory
-cp $GO_FILE $INSTALL_DIR/
-cp config.json $INSTALL_DIR/
+# Ensure the installation directory exists
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "Error: $INSTALL_DIR does not exist. Please ensure the directory is created and contains the necessary files."
+    exit 1
+fi
 
 # Create systemd service file
 echo "Creating systemd service file..."
 cat > $SERVICE_FILE <<EOL
 [Unit]
-Description=GoGitListener - GitHub Webhook Listener
+Description=goGitListener - GitHub Webhook Listener
 After=network.target
 
 [Service]
@@ -53,5 +51,5 @@ systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl start $SERVICE_NAME
 
-echo "Installation complete. The GoGitListener is now running as a service."
+echo "Installation complete. The goGitListener is now running as a service."
 echo "You can check its status with: systemctl status $SERVICE_NAME"
