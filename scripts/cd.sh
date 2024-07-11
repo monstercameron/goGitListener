@@ -12,8 +12,8 @@ BINARY_NAME="goGitListener"
 cd $INSTALL_DIR
 
 # Stop the service
-echo "Stopping $SERVICE_NAME service..."
-systemctl stop $SERVICE_NAME
+# echo "Stopping $SERVICE_NAME service..."
+# systemctl stop $SERVICE_NAME
 
 # Pull the latest changes from the main branch
 echo "Pulling latest changes from GitHub..."
@@ -25,6 +25,6 @@ echo "Rebuilding the application..."
 
 # Start the service
 echo "Starting $SERVICE_NAME service..."
-systemctl start $SERVICE_NAME
+systemctl restart $SERVICE_NAME
 
 echo "goGitListener updated and restarted successfully"
