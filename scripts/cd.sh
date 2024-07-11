@@ -21,7 +21,7 @@ git pull
 
 # Rebuild the Go application
 echo "Rebuilding the application..."
-go build -o $BINARY_NAME main.go
+/usr/local/go/bin/go build -o $BINARY_NAME
 
 # Start the service
 echo "Starting $SERVICE_NAME service..."
