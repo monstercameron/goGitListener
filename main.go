@@ -105,7 +105,7 @@ func main() {
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	projectName := r.URL.Query().Get("project")
 	if projectName == "" {
-		http.Error(w, "Project name is required", http.StatusBadRequest)
+		sendErrorResponse(w, "Project name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -128,7 +128,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logEntry.Status = fmt.Sprintf("error reading request body: %v", err)
 		logRequest(logEntry)
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		sendErrorResponse(w, "Error reading request body: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
@@ -142,7 +142,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			logEntry.Status = fmt.Sprintf("error parsing form data: %v", err)
 			logRequest(logEntry)
-			http.Error(w, "Error parsing form data", http.StatusBadRequest)
+			sendErrorResponse(w, "Error parsing form data: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		// Extract the payload from the "payload" form field
@@ -150,7 +150,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			logEntry.Status = fmt.Sprintf("error unescaping payload: %v", err)
 			logRequest(logEntry)
-			http.Error(w, "Error unescaping payload", http.StatusBadRequest)
+			sendErrorResponse(w, "Error unescaping payload: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		jsonPayload = []byte(payloadStr)
@@ -164,7 +164,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(jsonPayload, &githubPayload); err != nil {
 		logEntry.Status = fmt.Sprintf("error parsing payload: %v", err)
 		logRequest(logEntry)
-		http.Error(w, "Error parsing payload", http.StatusBadRequest)
+		sendErrorResponse(w, "Error parsing payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -183,14 +183,14 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		logEntry.Status = "invalid project"
 		logRequest(logEntry)
-		http.Error(w, "Invalid project", http.StatusBadRequest)
+		sendErrorResponse(w, "Invalid project", http.StatusBadRequest)
 		return
 	}
 
 	if !verifySignature(r.Header.Get("X-Hub-Signature-256"), jsonPayload, project.Secret) {
 		logEntry.Status = "invalid signature"
 		logRequest(logEntry)
-		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		sendErrorResponse(w, "Invalid signature", http.StatusUnauthorized)
 		return
 	}
 
@@ -199,16 +199,27 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if err := executeScript(project.Path); err != nil {
 			logEntry.Status = fmt.Sprintf("error executing script: %v", err)
 			logRequest(logEntry)
-			http.Error(w, "Error executing script", http.StatusInternalServerError)
+			sendErrorResponse(w, "Error executing script: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		log.Printf("Successfully executed script for project: %s", projectName)
 	}
 
 	logRequest(logEntry)
-	w.WriteHeader(http.StatusOK)
+	sendSuccessResponse(w, fmt.Sprintf("Webhook processed successfully for project: %s", projectName))
 }
 
+func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func sendSuccessResponse(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": message})
+}
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	logPath := filepath.Join(logDir, logFile)
 	logContent, err := os.ReadFile(logPath)
