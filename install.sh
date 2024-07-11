@@ -32,7 +32,7 @@ cd $INSTALL_DIR
 
 # Build the Go binary
 echo "Building the Go binary..."
-go build -o $BINARY_NAME main.go
+go build -o $BINARY_NAME
 
 if [ $? -ne 0 ]; then
     echo "Error: Failed to build the Go binary."
