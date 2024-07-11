@@ -14,6 +14,7 @@ cd $INSTALL_DIR
 
 # Pull the latest changes from the main branch
 echo "Pulling latest changes from GitHub..."
+git restore .
 git pull
 
 # Rebuild the Go application
