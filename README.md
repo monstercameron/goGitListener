@@ -1,4 +1,4 @@
-# GoGitListener
+# goGitListener
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -7,16 +7,17 @@
 4. [Installation](#installation)
 5. [Configuration](#configuration)
 6. [Usage](#usage)
-7. [Metrics](#metrics)
-8. [How It Works](#how-it-works)
-9. [Security Considerations](#security-considerations)
-10. [Troubleshooting](#troubleshooting)
-11. [Contributing](#contributing)
-12. [License](#license)
+7. [Webhook Handling](#webhook-handling)
+8. [Metrics](#metrics)
+9. [Logging](#logging)
+10. [Updating](#updating)
+11. [Troubleshooting](#troubleshooting)
+12. [Contributing](#contributing)
+13. [License](#license)
 
 ## Introduction
 
-GoGitListener is a Go application designed to automate actions in response to GitHub push events. It's particularly useful for managing multiple projects on a single server, such as a Digital Ocean VPS. When a push event occurs in a GitHub repository, this listener receives the webhook, verifies it, and executes a specified script for the corresponding project.
+goGitListener is a Go application designed to listen for GitHub webhooks and execute custom scripts based on push events. It's particularly useful for automating deployment processes or running specific tasks when changes are pushed to a GitHub repository.
 
 ## Features
 
@@ -24,59 +25,57 @@ GoGitListener is a Go application designed to automate actions in response to Gi
 - Securely verifies webhook signatures
 - Executes custom scripts for each project on push events
 - Configurable through a JSON file
-- Lightweight and easy to set up
-- Logs webhook requests for monitoring and debugging
+- Detailed logging for easy debugging
 - Provides a `/metrics` endpoint to view logs
+- Graceful update process that doesn't interrupt webhook processing
 
 ## Prerequisites
 
 - Go 1.16 or later
-- A server with a public IP address (e.g., a Digital Ocean VPS)
-- Basic knowledge of Go, GitHub, and server administration
-- Git installed on the server
+- Git
+- A server with a public IP address (e.g., a DigitalOcean droplet)
+- Basic knowledge of Go, Git, and server administration
+- Systemd for service management (typically pre-installed on most Linux distributions)
 
 ## Installation
 
-### Automated Installation
-
-An installation script is provided to easily set up GoGitListener as a systemd service.
-
-1. Ensure you have root access and Go is installed on your system.
-2. Place `install.sh`, `main.go`, and `config.json` in the same directory.
-3. Make the script executable:
+1. Clone the repository:
    ```
-   chmod +x install.sh
-   ```
-4. Run the installation script:
-   ```
-   sudo ./install.sh
-   ```
-5. The script will build the application, create a systemd service, and start it.
-6. You can check the status of the service with:
-   ```
-   systemctl status gogitlistener
+   git clone https://github.com/yourusername/goGitListener.git
+   cd goGitListener
    ```
 
-GoGitListener will now start automatically on system boot.
-
-### Manual Installation
-
-If you prefer to install manually:
-
-1. Clone this repository or copy the Go script to your server:
+2. Build the application:
    ```
-   git clone https://github.com/yourusername/gogitlistener.git
-   cd gogitlistener
+   go build -o goGitListener
    ```
 
-2. Build the Go application:
+3. Set up the systemd service:
    ```
-   go build -o gogitlistener main.go
+   sudo nano /etc/systemd/system/goGitListener.service
+   ```
+   
+   Add the following content (adjust paths as necessary):
+   ```
+   [Unit]
+   Description=goGitListener - GitHub Webhook Listener
+   After=network.target
+
+   [Service]
+   ExecStart=/root/goGitListener/goGitListener
+   WorkingDirectory=/root/goGitListener
+   User=root
+   Group=root
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
    ```
 
-3. Make the built application executable:
+4. Enable and start the service:
    ```
-   chmod +x gogitlistener
+   sudo systemctl enable goGitListener
+   sudo systemctl start goGitListener
    ```
 
 ## Configuration
@@ -84,96 +83,72 @@ If you prefer to install manually:
 1. Create a `config.json` file in the same directory as the executable:
    ```json
    {
-     "project1": {
-       "secret": "your_webhook_secret_for_project1",
-       "path": "/path/to/project1"
-     },
-     "project2": {
-       "secret": "your_webhook_secret_for_project2",
-       "path": "/path/to/project2"
+     "projectName": {
+       "secret": "your_github_webhook_secret",
+       "path": "/path/to/project"
      }
    }
    ```
 
-2. For each project, create a `cd.sh` script in the `scripts` directory within the project path. For example:
-   ```
-   /path/to/project1/scripts/cd.sh
-   /path/to/project2/scripts/cd.sh
-   ```
-
-   This script will be executed when a push event is received. For the GoGitListener project itself, you can use the following `cd.sh` script:
-
+2. For each project, create a `cd.sh` script in the `scripts` directory within the project path:
    ```bash
    #!/bin/bash
-   cd /path/to/gogitlistener
-   git pull origin main
-   go build -o gogitlistener main.go
-   sudo systemctl restart gogitlistener
+   set -e
+   
+   cd /path/to/project
+   git pull
+   # Add any other commands you want to run after a push
+   
+   touch /tmp/restart_required
    ```
-
-   Make sure to replace `/path/to/gogitlistener` with the actual path to your GoGitListener directory.
 
 3. Make sure the `cd.sh` scripts are executable:
    ```
-   chmod +x /path/to/project1/scripts/cd.sh
-   chmod +x /path/to/project2/scripts/cd.sh
+   chmod +x /path/to/project/scripts/cd.sh
    ```
 
 ## Usage
 
-1. Start GoGitListener:
-   ```
-   ./gogitlistener
-   ```
-
-2. Set up GitHub webhooks for each project:
+1. Set up GitHub webhooks for each project:
    - Go to your GitHub repository
    - Navigate to Settings > Webhooks > Add webhook
-   - Set Payload URL to `http://your_server_ip:8080/webhook?project=project1` (replace `project1` with your project name)
+   - Set Payload URL to `http://your_server_ip:3002/webhook?project=projectName`
    - Set Content type to `application/json`
    - Set Secret to the corresponding secret in your `config.json`
    - Choose "Just the push event" for events to trigger this webhook
 
-3. The listener will now receive webhooks and execute the corresponding `scripts/cd.sh` script for each push event.
+2. The listener will now receive webhooks and execute the corresponding `scripts/cd.sh` script for each push event.
+
+## Webhook Handling
+
+When a webhook is received:
+1. The application verifies the webhook signature
+2. It executes the appropriate `cd.sh` script for the project
+3. If the script creates a `/tmp/restart_required` file, the application will gracefully restart after processing the webhook
 
 ## Metrics
 
-GoGitListener provides a `/metrics` endpoint to view the logs of webhook requests. To access the metrics:
+Access the `/metrics` endpoint to view logs:
+```
+http://your_server_ip:3002/metrics
+```
 
-1. Ensure GoGitListener is running.
-2. Open a web browser or use a tool like `curl` to access:
-   ```
-   http://your_server_ip:8080/metrics
-   ```
-3. You will see the contents of the `logs/log.log` file, which contains detailed information about each webhook request received.
+## Logging
 
-Note: In a production environment, you should secure this endpoint to prevent unauthorized access to potentially sensitive information.
+Logs are stored in the `logs/log.log` file. Each webhook request and processing step is logged for easy debugging.
 
-## How It Works
+## Updating
 
-1. When a push event occurs on GitHub, it sends a POST request to the specified webhook URL.
-2. GoGitListener receives this request and extracts the project name from the URL query parameters.
-3. It loads the project configuration from `config.json` and verifies the webhook signature using the project's secret.
-4. If the signature is valid, it executes the `scripts/cd.sh` script in the project's specified path.
-5. The script typically pulls the latest changes, rebuilds the application if necessary, and restarts the service.
-6. All webhook requests are logged to `logs/log.log` for monitoring and debugging purposes.
+To update the goGitListener itself:
 
-## Security Considerations
-
-- Use HTTPS instead of HTTP for webhook URLs in production.
-- Keep your webhook secrets secure and don't share them.
-- Regularly update your Go installation and dependencies.
-- Implement proper firewall rules on your server.
-- Limit the permissions of the user running GoGitListener.
-- Secure the `/metrics` endpoint in production environments.
+1. Push changes to the goGitListener repository
+2. The application will pull the latest changes, rebuild itself, and gracefully restart
 
 ## Troubleshooting
 
-- **Webhook not triggering**: Check GitHub webhook delivery logs and ensure your server is accessible.
-- **Invalid signature errors**: Verify that the secrets in `config.json` match those set in GitHub.
-- **Script not executing**: Check file permissions and paths in `config.json`. Ensure `scripts/cd.sh` exists in the project directory.
-- **Errors in script execution**: Review your `cd.sh` scripts and check the listener's log output.
-- **Service not restarting**: Ensure the user running GoGitListener has permission to restart the service.
+- Check the logs at `logs/log.log` for detailed information about each webhook request and processing step
+- Ensure that the `cd.sh` scripts have the correct permissions and are executable
+- Verify that the GitHub webhook secrets in `config.json` match those set in GitHub
 
 ## Contributing
 
