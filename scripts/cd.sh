@@ -17,7 +17,7 @@ systemctl stop $SERVICE_NAME
 
 # Pull the latest changes from the main branch
 echo "Pulling latest changes from GitHub..."
-git pull origin main
+git pull
 
 # Rebuild the Go application
 echo "Rebuilding the application..."
