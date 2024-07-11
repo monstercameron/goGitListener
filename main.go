@@ -1,17 +1,15 @@
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -104,36 +102,6 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-func setupLogging() error {
-	// Open the log file
-	logPath := filepath.Join(logDir, logFile)
-	logFileHandle, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("error opening log file: %v", err)
-	}
-
-	// Set up the logger
-	logger = log.New(logFileHandle, "", log.LstdFlags)
-	log.Printf("Logging to %s", logPath)
-
-	return nil
-}
-
-func loadConfig() (Config, error) {
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, fmt.Errorf("error reading config file: %v", err)
-	}
-
-	var config Config
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing config file: %v", err)
-	}
-
-	return config, nil
-}
-
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	projectName := r.URL.Query().Get("project")
 	if projectName == "" {
@@ -155,7 +123,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Read and log payload
+	// Read the raw payload
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		logEntry.Status = fmt.Sprintf("error reading request body: %v", err)
@@ -165,9 +133,35 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Parse the payload
+	// Check if the content is form-encoded
+	contentType := r.Header.Get("Content-Type")
+	var jsonPayload []byte
+	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		// Parse form data
+		err = r.ParseForm()
+		if err != nil {
+			logEntry.Status = fmt.Sprintf("error parsing form data: %v", err)
+			logRequest(logEntry)
+			http.Error(w, "Error parsing form data", http.StatusBadRequest)
+			return
+		}
+		// Extract the payload from the "payload" form field
+		payloadStr, err := url.QueryUnescape(r.FormValue("payload"))
+		if err != nil {
+			logEntry.Status = fmt.Sprintf("error unescaping payload: %v", err)
+			logRequest(logEntry)
+			http.Error(w, "Error unescaping payload", http.StatusBadRequest)
+			return
+		}
+		jsonPayload = []byte(payloadStr)
+	} else {
+		// Assume it's JSON if not form-encoded
+		jsonPayload = payload
+	}
+
+	// Parse the JSON payload
 	var githubPayload map[string]interface{}
-	if err := json.Unmarshal(payload, &githubPayload); err != nil {
+	if err := json.Unmarshal(jsonPayload, &githubPayload); err != nil {
 		logEntry.Status = fmt.Sprintf("error parsing payload: %v", err)
 		logRequest(logEntry)
 		http.Error(w, "Error parsing payload", http.StatusBadRequest)
@@ -193,7 +187,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !verifySignature(r.Header.Get("X-Hub-Signature-256"), payload, project.Secret) {
+	if !verifySignature(r.Header.Get("X-Hub-Signature-256"), jsonPayload, project.Secret) {
 		logEntry.Status = "invalid signature"
 		logRequest(logEntry)
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
@@ -213,57 +207,6 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	logRequest(logEntry)
 	w.WriteHeader(http.StatusOK)
-}
-
-func verifySignature(signature string, payload []byte, secret string) bool {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(payload)
-	expectedSignature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(signature), []byte(expectedSignature))
-}
-
-func executeScript(projectPath string) error {
-	scriptPath := filepath.Join(projectPath, "scripts", cdScriptName)
-
-	// Check if the script exists
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("script does not exist: %s", scriptPath)
-	}
-
-	// Get the current file mode
-	info, err := os.Stat(scriptPath)
-	if err != nil {
-		return fmt.Errorf("error getting file info: %v", err)
-	}
-
-	// Check if the script is executable
-	if info.Mode().Perm()&0111 == 0 {
-		// Make the script executable
-		if err := os.Chmod(scriptPath, info.Mode()|0111); err != nil {
-			return fmt.Errorf("error making script executable: %v", err)
-		}
-		log.Printf("Made script executable: %s", scriptPath)
-	}
-
-	// Execute the script
-	cmd := exec.Command("/bin/sh", scriptPath)
-	cmd.Dir = projectPath
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("script execution failed: %v\nOutput: %s", err, output)
-	}
-
-	log.Printf("Script executed successfully: %s", scriptPath)
-	return nil
-}
-
-func logRequest(entry LogEntry) {
-	jsonEntry, err := json.Marshal(entry)
-	if err != nil {
-		log.Printf("Error marshaling log entry: %v", err)
-		return
-	}
-	logger.Println(string(jsonEntry))
 }
 
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
