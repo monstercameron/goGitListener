@@ -7,13 +7,10 @@ set -e
 SERVICE_NAME="goGitListener"
 INSTALL_DIR="/root/goGitListener"
 BINARY_NAME="goGitListener"
+RESTART_FLAG="/tmp/restart_required"
 
 # Change to the goGitListener directory
 cd $INSTALL_DIR
-
-# Stop the service
-# echo "Stopping $SERVICE_NAME service..."
-# systemctl stop $SERVICE_NAME
 
 # Pull the latest changes from the main branch
 echo "Pulling latest changes from GitHub..."
@@ -23,8 +20,8 @@ git pull
 echo "Rebuilding the application..."
 /usr/local/go/bin/go build -o $BINARY_NAME
 
-# Start the service
-echo "Starting $SERVICE_NAME service..."
-systemctl restart $SERVICE_NAME
+# Create the restart flag file
+echo "Creating restart flag..."
+touch $RESTART_FLAG
 
-echo "goGitListener updated and restarted successfully"
+echo "goGitListener updated successfully. It will restart after processing the current webhook."

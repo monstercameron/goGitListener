@@ -43,7 +43,7 @@ var (
 
 func init() {
 	log.Println("Initializing application...")
-
+	
 	// Check if config file exists
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		log.Fatalf("Config file %s does not exist", configFile)
@@ -80,7 +80,7 @@ func init() {
 
 func main() {
 	log.Println("Starting main function...")
-
+	
 	var err error
 	config, err = loadConfig()
 	if err != nil {
@@ -120,7 +120,7 @@ func main() {
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	log.Println("Handling webhook...")
-
+	
 	projectName := r.URL.Query().Get("project")
 	if projectName == "" {
 		log.Println("Error: Project name is required")
@@ -257,6 +257,16 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	logRequest(logEntry)
 	log.Println("Webhook handled successfully.")
 	sendSuccessResponse(w, fmt.Sprintf("Webhook processed successfully for project: %s", projectName))
+
+	// Check if restart is required
+	if _, err := os.Stat("/tmp/restart_required"); err == nil {
+		log.Println("Restart flag detected. Shutting down server...")
+		os.Remove("/tmp/restart_required")
+		go func() {
+			time.Sleep(2 * time.Second)  // Give time for the response to be sent
+			os.Exit(0)  // This will cause systemd to restart the service
+		}()
+	}
 }
 
 func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
@@ -288,3 +298,6 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write(logContent)
 	log.Println("Metrics request handled successfully.")
 }
+
+// Utility functions (loadConfig, setupLogging, verifySignature, executeScript, logRequest)
+// should be implemented in utils.go
